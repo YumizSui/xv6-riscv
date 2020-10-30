@@ -133,6 +133,7 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_pingpong\
+	$U/_pingpong_gettime\
 	$U/_test_gettime\
 
 fs.img: mkfs/mkfs README $(UPROGS)

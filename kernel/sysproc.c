@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "time.h"
 
 uint64
 sys_exit(void)
@@ -96,13 +97,26 @@ sys_uptime(void)
   return xticks;
 }
 
-// 実行時間の計測
-uint
+// 実行時間の計測: gettimeofdayを参考
+uint64
 sys_gettime(void)
 {
+  // 現在のticksを確保
   uint xticks;
   acquire(&tickslock);
   xticks = ticks;
   release(&tickslock);
-  return xticks/10;
+
+  uint64 tv_addr;
+  struct timeval tv;
+  // gettimeの引数をポインタとして取得
+  if(argaddr(0, &tv_addr) < 0)
+    return -1;
+  tv.tv_sec =xticks/10;
+  tv.tv_msec = (xticks % 10)*100;
+
+  // tvをkernel空間からuser空間にコピーする．
+  if(copyout(myproc()->pagetable, tv_addr, (char *)&tv, sizeof(tv))  < 0)
+    return -1;
+  return 0;
 }
