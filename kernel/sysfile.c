@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "fseek.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -487,4 +488,40 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+// lseek
+uint64
+sys_lseek(void)
+{
+  struct file *f;
+  int offset;
+  int whence;
+  
+  if(argfd(0, 0, &f) < 0 || argint(1, &offset) < 0 || argint(2, &whence) < 0)
+    return -1;
+  
+  int off=0;
+  uint size = f->ip->size;
+
+  switch (whence)
+  {
+  case SEEK_SET:
+    off = offset;
+    break;
+  case SEEK_CUR:
+    off = f->off+ offset;
+    break;
+  case SEEK_END:
+    off = f->ip->size-offset;
+    break;
+  default:
+    return -1;
+  }
+  if(off>size)
+    f->ip->size = off;
+  
+  f->off = off;
+  
+  return off;
 }
