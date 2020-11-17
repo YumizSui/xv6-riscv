@@ -335,7 +335,11 @@ sys_open(void)
     f->major = ip->major;
   } else {
     f->type = FD_INODE;
-    f->off = 0;
+    if((omode & O_APPEND) && ip->type == T_FILE){
+      f->off = ip->size;
+    } else {
+      f->off = 0;
+    }
   }
   f->ip = ip;
   f->readable = !(omode & O_WRONLY);
