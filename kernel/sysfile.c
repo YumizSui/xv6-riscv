@@ -513,15 +513,18 @@ sys_lseek(void)
     off = f->off+ offset;
     break;
   case SEEK_END:
-    off = f->ip->size-offset;
+    off = f->ip->size + offset;
     break;
   default:
     return -1;
   }
-  if(off>size)
-    f->ip->size = off;
+
+  if(off>size){
+    f->ip->size = size;
+    if(fileappend(f, off - size) < 0)
+      return -1;
+  }
   
   f->off = off;
-  
   return off;
 }
