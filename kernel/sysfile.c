@@ -498,19 +498,21 @@ sys_lseek(void)
   int offset;
   int whence;
   
+  // 変数の受け渡し
   if(argfd(0, 0, &f) < 0 || argint(1, &offset) < 0 || argint(2, &whence) < 0)
     return -1;
   
   int off=0;
   uint size = f->ip->size;
 
+  // オフセットの計算
   switch (whence)
   {
   case SEEK_SET:
     off = offset;
     break;
   case SEEK_CUR:
-    off = f->off+ offset;
+    off = f->off + offset;
     break;
   case SEEK_END:
     off = f->ip->size + offset;
@@ -519,12 +521,91 @@ sys_lseek(void)
     return -1;
   }
 
-  if(off>size){
-    f->ip->size = size;
+  if(off > size){
+    //ファイル末尾を起点にそれ以降をバイトゼロで埋める
+    f->off = size;
     if(fileappend(f, off - size) < 0)
       return -1;
   }
   
   f->off = off;
   return off;
+}
+
+// symlink
+uint64
+sys_symlink(void)
+{
+
+  char target[MAXPATH];
+  char linkpath[MAXPATH];
+  int len_target, len_linkpath;
+
+  // 変数の受け渡し
+  if((len_target = argstr(0, target, MAXPATH)) < 0 || (len_linkpath = argstr(1, linkpath, MAXPATH)) < 0)
+    return -1;
+
+  begin_op();
+  
+  // リンクファイルの作成
+  struct inode *ip;
+  if((ip = create(linkpath, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+  
+  // targetをリンクファイルに書き込み
+  if(writei(ip, 0, (uint64) target, 0, len_target) != len_target)
+    panic("symlink: writei");
+
+  iunlockput(ip);
+  end_op();
+
+  return 0;
+}
+
+// readlink
+uint64
+sys_readlink(void)
+{
+  char pathname[MAXPATH], name[DIRSIZ];
+  uint64 buf;
+  int bufsiz;
+
+  // 変数の受け渡し
+  if(argstr(0, pathname, MAXPATH) < 0 || argaddr(1, &buf) < 0 || argint(2, &bufsiz) < 0)
+    return -1;
+  
+  begin_op();
+  
+  struct inode *p_ip, *ip;
+
+  // 対象のinodeを要素に持つディレクトリ(p_ip)のinodeを取得する
+  if((p_ip = nameiparent(pathname, name)) == 0)
+    return -1;
+
+  ilock(p_ip);
+
+  // dirlookupで対象のinodeを取得する
+  if((ip = dirlookup(p_ip, name, 0)) == 0){
+    iunlockput(p_ip);
+    end_op();
+    return 0;
+  }
+  iunlockput(p_ip);
+
+  ilock(ip);
+  if(ip->type != T_SYMLINK){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  //　リンクファイルの中身をreadしてbufに入れる
+  int n;
+  if((n = readi(ip, 1, buf, 0, bufsiz)) < 0)
+    panic("readlink: readi");
+  iunlockput(ip);
+  
+  end_op();
+  return n;
 }

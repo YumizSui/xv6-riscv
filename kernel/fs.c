@@ -625,13 +625,17 @@ skipelem(char *path, char *name)
 // path element into name, which must have room for DIRSIZ bytes.
 // Must be called inside a transaction since it calls iput().
 static struct inode*
-namex(char *path, int nameiparent, char *name)
+namex(struct inode *root, char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
+  char next_path[MAXPATH], tname[DIRSIZ];
+  
 
-  if(*path == '/')
+  if(*path == '/') // ROOTを起点とする
     ip = iget(ROOTDEV, ROOTINO);
-  else
+  else if(root) // rootを起点とする
+    ip = idup(root);
+  else //実行位置を起点とする
     ip = idup(myproc()->cwd);
 
   while((path = skipelem(path, name)) != 0){
@@ -649,7 +653,23 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
-    iunlockput(ip);
+    iunlock(ip);
+
+    // next がsymlinkならnext inodeをシンボリックリンクの宛先に変更する
+    ilock(next);
+    if(next->type == T_SYMLINK){
+      if(next->size >= MAXPATH || readi(next, 0, (uint64) next_path, 0, next->size) != next->size){
+        iunlockput(next);
+        iput(ip);
+        return 0;
+      }
+      iunlockput(next);
+      // シンボリックの中身を参照して値を得る．
+      next = namex(ip, next_path, 0, tname);
+    }else {
+      iunlock(next);
+    }
+    iput(ip);
     ip = next;
   }
   if(nameiparent){
@@ -663,11 +683,11 @@ struct inode*
 namei(char *path)
 {
   char name[DIRSIZ];
-  return namex(path, 0, name);
+  return namex(0, path, 0, name);
 }
 
 struct inode*
 nameiparent(char *path, char *name)
 {
-  return namex(path, 1, name);
+  return namex(0, path, 1, name);
 }
